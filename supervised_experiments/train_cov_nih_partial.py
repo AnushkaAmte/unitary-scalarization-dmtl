@@ -8,6 +8,8 @@ import random
 import numpy as np
 import wandb
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from supervised_experiments.utils import create_logger
 
 import supervised_experiments.losses as losses_f

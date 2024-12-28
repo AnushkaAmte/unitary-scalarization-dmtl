@@ -115,12 +115,14 @@ class FaceAttributeDecoder(nn.Module):
         self.gap = nn.AvgPool2d(16, 16)
         self.prediction_layer = nn.Sequential(nn.Linear(8192, 2))
         self.gradients = None
+        self.activations = None
     
     def forward(self, x, mask):
-        print(x.shape)
+        #print(x.shape)
         x = self.transition_layer(x)
         x = self.relu(x)
-        h = x.register_hook(self.activations_hook)
+        if x.requires_grad == True:
+            h = x.register_hook(self.activations_hook)
         x = self.gap(x)
         x = x.view(x.size(0), -1)
         x = self.prediction_layer(x)

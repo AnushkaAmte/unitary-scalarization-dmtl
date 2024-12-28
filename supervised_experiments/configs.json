@@ -20,24 +20,38 @@
     },
 
     "nih": {
-        "path": "/scratch/mariamma/xraysetu/dataset/nih_data/",
+        "path": "/data6/rajivporana_scratch/datasets/nih_data/",
         "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
         "img_rows": 512,
         "img_cols": 512
     },
 
     "cov_nih": {
-        "path": "/scratch/mariamma/xraysetu/dataset/nih_data/",
+        "path": "/data6/rajivporana_scratch/datasets/nih_data/",
         "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
         "img_rows": 512,
-        "img_cols": 512
+        "img_cols": 512,
+        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/"
+    },
+    "chexphoto": {
+        "path": "/data6/rajivporana_scratch/datasets/chexphoto_data/",
+        "train_filelist": "/data6/rajivporana_scratch/datasets/chexphoto_data/CheXphoto-v1.0/train_chex_photo.csv",
+        "val_filelist": "/data6/rajivporana_scratch/datasets/chexphoto_data/CheXphoto-v1.0/valid_chex_photo.csv",
+        "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
+        "img_rows": 512,
+        "img_cols": 512,
+        "model_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/chexphoto/saved_models/",
+        "results_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/chexphoto/results/",
+        "lung_segment_path": "/data6/rajivporana_scratch/datasets/covidx3_upsampled_lung_segment/test",
+        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/chexphoto/test_results/"
     },
 
     "utils": {
-        "model_storage_old": "/scratch/mariamma/celeba/unitary_scalarization/saved_models/",
-        "model_storage": "/scratch/mariamma/mtl/nih/saliency_train/saved_models/",
-        "results_storage_old": "/scratch/mariamma/mtl/nih/saliency_mtl/",
-        "results_storage": "/scratch/mariamma/mtl/nih/saliency_train/results_folder/",
+        "model_storage_old": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/saved_models/",
+        "model_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/saved_models/",
+        "results_storage_old": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/",
+        "results_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/",
         "profile_storage": "/scratch/mariamma/mtl/nih/saliency_train/profiling/"
     }
+    
 }

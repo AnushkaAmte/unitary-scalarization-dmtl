@@ -20,11 +20,12 @@ class CovidNIHDatasetPartial(Dataset):
     #-------------------------------------------------------------------------------- 
     def __init__(self, root, split="train", is_transform=False, img_size=(512, 512), nih_labels=[], 
             augmentations=None, whatsapp_data=False, nih_normal = False,
-            nih_pne = False):
+            nih_pne = False, image_name = False, covid_img_only = False):
     
         self.listImagePaths = []
         self.listImageLabels = []
         self.listWAImagePaths = []
+        self.listImageNames = []
         self.transform = transforms.Compose([
                     transforms.ToTensor(),
                     transforms.Resize(size=img_size),
@@ -36,6 +37,8 @@ class CovidNIHDatasetPartial(Dataset):
 
         self.nih_labels = self.convert_label_toints(nih_labels)
         self.whatsapp_data = whatsapp_data
+        self.image_name = image_name
+        self.covid_img_only = covid_img_only
 
         if split == "train":
             pathImageDirectory = os.path.join(root,"training_images/")
@@ -106,7 +109,12 @@ class CovidNIHDatasetPartial(Dataset):
             imageDataWA = Image.open(imagePathWA).convert('RGB')
             if self.transform != None: 
                 imageDataWA = self.transform(imageDataWA)
-            return imageData, imageDataWA, imageLabel            
+            if self.image_name == True:
+                imageName = self.listImageNames[index]
+                return imageName, imageData, imageDataWA, imageLabel            
+            else:         
+                return imageData, imageDataWA, imageLabel 
+            #return imageData, imageDataWA, imageLabel            
 
         return imageData, imageLabel
         
@@ -138,17 +146,17 @@ class CovidNIHDatasetPartial(Dataset):
     
 
     def load_covid_images(self, split):
-        covid_pathDirData = "/scratch/mariamma/xraysetu/dataset/covidx3_upsampled/"
+        covid_pathDirData = "/data6/rajivporana_scratch/datasets/covidx3_upsampled/"
         if split == "train":
-            pathDatasetFile = "/scratch/mariamma/xraysetu/dataset/covid_train.txt"
+            pathDatasetFile = "/data6/rajivporana_scratch/datasets/covid_train.txt"
             pathImageDirectory = os.path.join(covid_pathDirData,"train") 
         elif split == "val":
-            pathDatasetFile = "/scratch/mariamma/xraysetu/dataset/covid_val.txt"
+            pathDatasetFile = "/data6/rajivporana_scratch/datasets/covid_val.txt"
             pathImageDirectory = os.path.join(covid_pathDirData,"test")
         elif split == "test":    
-            pathDatasetFile = "/scratch/mariamma/xraysetu/dataset/covid_test.txt"
-            pathImageDirectory = "/scratch/mariamma/xraysetu/dataset/covid_binary_test/"
-            pathWaImageDirectory = "/scratch/mariamma/xraysetu/dataset/covid_binary_test_whatsapp_CORRECT/"
+            pathDatasetFile = "/data6/rajivporana_scratch/datasets/covid_test.txt"
+            pathImageDirectory = "/data6/rajivporana_scratch/datasets/covid_binary_test/"
+            pathWaImageDirectory = "/data6/rajivporana_scratch/datasets/covid_binary_test_whatsapp_CORRECT/"
             if self.whatsapp_data == True:
                 self.read_pair_imgs(pathDatasetFile, pathImageDirectory, pathWaImageDirectory)
                 return
@@ -181,6 +189,19 @@ class CovidNIHDatasetPartial(Dataset):
                 self.listImageLabels.append(imageLabel)  
         fileDescriptor.close()
 
+    def append_img_paths(self, pathImageDirectory, pathWaImageDirectory, lineItems):
+        imagePath = os.path.join(pathImageDirectory, lineItems[0])
+                
+        imageLabel = lineItems[1:]
+        imageLabel = [int(i) for i in imageLabel]
+
+        imagePathWhatsapp = os.path.join(pathWaImageDirectory, lineItems[0])
+                    
+        self.listImagePaths.append(imagePath)
+        self.listImageLabels.append(imageLabel)  
+        self.listWAImagePaths.append(imagePathWhatsapp)
+        self.listImageNames.append(lineItems[0])
+
 
     def read_pair_imgs(self, pathDatasetFile, pathImageDirectory, pathWaImageDirectory):
         fileDescriptor = open(pathDatasetFile, "r")
@@ -197,13 +218,8 @@ class CovidNIHDatasetPartial(Dataset):
           
                 lineItems = line.split()
                 
-                imagePath = os.path.join(pathImageDirectory, lineItems[0])
-                imageLabel = lineItems[1:]
-                imageLabel = [int(i) for i in imageLabel]
-
-                imagePathWhatsapp = os.path.join(pathWaImageDirectory, lineItems[0])
-                
-                self.listImagePaths.append(imagePath)
-                self.listImageLabels.append(imageLabel)  
-                self.listWAImagePaths.append(imagePathWhatsapp)
+                if self.covid_img_only == False:
+                    self.append_img_paths(pathImageDirectory, pathWaImageDirectory, lineItems)
+                elif self.covid_img_only == True and "1_COVID-19" in lineItems[0]:
+                    self.append_img_paths(pathImageDirectory, pathWaImageDirectory, lineItems)
         fileDescriptor.close()    
