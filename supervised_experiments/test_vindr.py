@@ -67,7 +67,13 @@ def load_model(model, folder, net_basename, name):
     state = torch.load(f"{folder}{net_basename}_{name}_model.pkl")
     #state = torch.load(f"{folder}{net_basename}")
     #model.load_state_dict(state['rep'])
-    model.load_state_dict(state['model_rep'])
+    filtered_state_dict = {k: v for k, v in state['model_rep'].items() if k in model.state_dict()}
+
+# Load the filtered state dictionary into the model
+    num_classes = 16  # Set this to the number of classes in your dataset
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
+    model.load_state_dict(filtered_state_dict, strict=False)
     return model
 
 
@@ -89,65 +95,13 @@ def ols_score(fname, image_size, lung_segment_path, heatmap_hr,heatmap_lr, row, 
     return row      
 
 
-def compute_rho(args, model, dataTestLoader, lung_segment_path, device):
-    model.eval()
-    image_size = 256
-    df = pd.DataFrame()
-
-    for fname, orig_img, wp_img in dataTestLoader:
-        fname = fname[0]
-        orig_img = [img.to(device) for img in orig_img]
-        for img in orig_img: img.requires_grad_()
-        res_orig = model(orig_img)
-
-        wp_images = [img.to(device) for img in wp_img]
-        for img in wp_images: img.requires_grad_()
-        res_wp = model(wp_images)
-
-        res_orig = res_orig[0]
-        res_orig_bboxes = res_orig['boxes']
-        res_orig_labels = res_orig['labels'].cpu().detach().numpy()
-        res_wp = res_wp[0]
-        res_wp_bboxes = res_wp['boxes']
-        res_wp_labels = res_wp['labels'].cpu().detach().numpy()
-
-        row={}
-        for i in range(15):
-            if i in res_orig_labels and i in res_wp_labels:
-                for j in range(i+1, 15):
-                    if j in res_orig_labels and j in res_wp_labels:
-                        orig_label_idx = np.where(res_orig_labels == i)
-                        wp_label_idx = np.where(res_wp_labels == j)
-
-                        orig_bbox = res_orig_bboxes[orig_label_idx]
-                        wp_bbox = res_wp_bboxes[wp_label_idx]        
-
-                        det_sal_robustness = torch.autograd.grad(orig_bbox.sum(), orig_img, retain_graph=True)[0]
-                        print("Det saliency:", det_sal_robustness.shape)
-
-                        seg_sal_robustness = torch.autograd.grad(wp_bbox.sum(), wp_images, retain_graph=True)[0]
-                        print("Seg saliency:", seg_sal_robustness.shape)
-
-                        grad_type = str(i) + "_" + str(j)
-                        ols_score(fname, image_size, lung_segment_path, det_sal_robustness, seg_sal_robustness, row, grad_type)
-
-                        det_sal_robustness = torch.flatten(det_sal_robustness)
-                        seg_sal_robustness = torch.flatten(seg_sal_robustness)
-                        det_correlation = torch.dot(det_sal_robustness, seg_sal_robustness) / (torch.norm(det_sal_robustness) * torch.norm(seg_sal_robustness))
-                        print("Correlation : {},{}={}".format(i,j,det_correlation))
-                        row[grad_type+'_corr'] = det_correlation
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)  
-    return df
-
-#hello
-
 
 def test(args):
      
     height = 256
     width = 256
     pathDir = "/data6/rajivporana_scratch/vindr_data/png_test"
-    wh_pathDir = "/data6/rajivporana_scratch/vindr_data/wh_proper_test/"
+    wh_pathDir = "/data6/rajivporana_scratch/vindr_data/wh_proper_train/"
     lung_segment_path = "/data6/rajivporana_scratch/vindr_bbox/dataset/png_test_lung_segment/"
     target_dir = "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/saved_results/"
     dataTest = LungImages(pathDir, wh_pathDir, height, width, 
@@ -169,7 +123,8 @@ def test(args):
     model = load_model(model, args.model_folder, args.net_basename, args.model_name)
     model.to(device)
 
-    df = compute_rho(args, model, dataTestLoader, lung_segment_path, device=device)
+    #df = compute_rho(args, model, dataTestLoader, lung_segment_path, device=device)d
+    df = pd.DataFrame()
     filename = args.net_basename + ".csv"  
     df.to_csv(os.path.join(target_dir, filename), index=False)                              
 
