@@ -91,12 +91,12 @@ def get_dataset(dataset, batch_size, configs, generator=None, worker_init_fn=Non
             # Return training + validation split for training loop.
             train_dst = CovidNIHDatasetPartial(root=configs['cov_nih']['path'], is_transform=True, split='train',
                                img_size=(configs['cov_nih']['img_rows'], configs['cov_nih']['img_cols']),
-                               nih_labels=nih_labels, lung_seg_root = configs['cov_nih']['nih_lung_seg_path'],
+                               nih_labels=nih_labels, 
                                augmentations=None, 
                                train_lung_segments = train_lung_segments)
             val_dst = CovidNIHDatasetPartial(root=configs['cov_nih']['path'], is_transform=True, split='val',
                              img_size=(configs['cov_nih']['img_rows'], configs['cov_nih']['img_cols']),
-                             nih_labels=nih_labels, lung_seg_root = configs['cov_nih']['nih_lung_seg_path'],
+                             nih_labels=nih_labels, 
                              augmentations=None, 
                              train_lung_segments = train_lung_segments)
 
@@ -109,10 +109,10 @@ def get_dataset(dataset, batch_size, configs, generator=None, worker_init_fn=Non
             # Return test split only for evaluation of a stored model.
             test_dst = CovidNIHDatasetPartial(root=configs['cov_nih']['path'], is_transform=True, split='test',
                              img_size=(configs['cov_nih']['img_rows'], configs['cov_nih']['img_cols']),
-                             nih_labels=nih_labels, lung_seg_root = configs['cov_nih']['nih_lung_seg_path'],
+                             nih_labels=nih_labels, 
                              augmentations=None, whatsapp_data=whatsapp_data,
                              image_name = image_name, covid_img_only = covid_img_only,
-                             lung_seg_imagename = lung_seg_imagename)
+                            )
             test_loader = torch.utils.data.DataLoader(test_dst, batch_size=batch_size, num_workers=4,
                                                       generator=generator, worker_init_fn=worker_init_fn)
             return test_loader                    

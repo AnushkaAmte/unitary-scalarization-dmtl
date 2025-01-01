@@ -23,14 +23,14 @@ def load_saved_model(models, tasks, net_basename, folder="saved_models/", name="
 
 
 def convert_label_toints(labels):
-    #nih_classes = [ 'Ate', 'Car', 'Eff', 'Inf', 'Mas', 'Nod', 'Pne',
-    #                    'Pnt', 'Con', 'Ede', 'Emp', 'Fib', 'Ple', 
-    #                    'Her', 'Nor', 'Cov']    
+    nih_classes = [ 'Ate', 'Car', 'Eff', 'Inf', 'Mas', 'Nod', 'Pne',
+                        'Pnt', 'Con', 'Ede', 'Emp', 'Fib', 'Ple', 
+                        'Her', 'Nor', 'Cov']    
     #                 0    1     2     3     4      5      6    7     8     9      10     11    12    13    14
     chex_classes = ["Nor","EnC","Car","LunO","LunL","Ede","Con","Pne","Ate","Pnt","Ple","PleO","Fra","Sup","Cov"]            
     int_labels = []                        
     for x in labels:
-        int_labels.append(chex_classes.index(x))
+        int_labels.append(nih_classes.index(x))
     return int_labels 
 
 
@@ -212,7 +212,7 @@ def create_gradnormsq_heatmap(model, val_rep, t, image_name_path, heatmap_folder
 
     # Pool gradients across spatial dimensions (H, W) for each feature map
     pooled_gradients = torch.mean(norm_gradients, dim=[0, 2, 3])  # Shape [512]
-    
+    #pooled gradients is \alpha_c^k
     # Weight the channels by corresponding gradients
     for i in range(activations.shape[1]):
         activations[:, i, :, :] *= pooled_gradients[i]
@@ -234,12 +234,15 @@ def create_gradnormsq_heatmap(model, val_rep, t, image_name_path, heatmap_folder
     elif ".JPG" in image_name:
         image_name_pt = image_name.replace(".JPG", ".pt")
     
-    torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
+    #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
+    image_name_pt = image_name_pt.replace("/","_")
+    torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
     return
 
 
 
-def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder,median = False):
+def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder):
+    #print("1")
     out_t, _, _ = model[t](val_rep, None)
     if out_t[0][1] > out_t[0][0]:
         out_t[0][1].backward(retain_graph=True)
@@ -247,29 +250,21 @@ def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder,median = F
         out_t[0][0].backward(retain_graph=True)
     gradients = model[t].get_activations_gradient()
     activations = model[t].get_activations(val_rep).detach()
-    
+    #print("2")
     # weight the channels by corresponding gradients
     pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
+    #print(f"alpha_{t} : {pooled_gradients}")
+
     for i in range(activations.shape[1]):
         activations[:, i, :, :] *= pooled_gradients[i]
 
-    # average the channels of the activations
-    if median:
-        #print(activations)
-        #print(min(activations[:,1,:,:]))
-        heatmap = torch.median(activations, dim=1).values.squeeze()
-        #print(heatmap) #.squeeze()
-    else:
-        heatmap = torch.mean(activations, dim=1).squeeze()
+    heatmap = torch.mean(activations, dim=1).squeeze()
     # relu on top of the heatmap
     # expression (2) in https://arxiv.org/pdf/1610.02391.pdf
     # heatmap = np.maximum(heatmap, 0)
     heatmap = torch.nn.functional.relu(heatmap)
     # normalize the heatmap
-    if median:
-        heatmap /= (torch.max(heatmap) + 1e-10)
-    else:
-        heatmap /= torch.max(heatmap)
+    heatmap /= torch.max(heatmap)
     #print(heatmap)
     image_name_list = image_name_path.split('/')
     image_name = image_name_list[1]
@@ -281,8 +276,12 @@ def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder,median = F
     elif ".jpeg" in image_name:
         image_name_pt = image_name.replace(".jpeg", ".pt")
     elif ".JPG" in image_name:
-        image_name_pt = image_name.replace(".JPG", ".pt")    
-    torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/","_")))    
+        image_name_pt = image_name.replace(".JPG", ".pt") 
+    image_name_pt = image_name_pt.replace("/","_")
+    #torch.save(heatmap, os.path.join(heatmap_folder, ))   
+    #torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
+    torch.save(activations, os.path.join(heatmap_folder, f"{image_name_pt}_activations_{t}.pt"))
+    torch.save(gradients, os.path.join(heatmap_folder, f"{image_name_pt}_heatmap_{t}.pt")) 
     return 
 
 
@@ -295,6 +294,7 @@ def generate_heatmap(args, random_seed):
     g.manual_seed(random_seed)
 
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print("Device : ", DEVICE)
     logger = create_logger('Main')
     with open('supervised_experiments/configs.json') as config_params:
         configs = json.load(config_params)
@@ -304,16 +304,16 @@ def generate_heatmap(args, random_seed):
     tasks = configs[args.dataset]['tasks']
     tasks = [tasks[t] for t in nih_labels_indices]
     print("Tasks : ", tasks)
-
+    
     model = model_selector.get_model(args.dataset, configs[args.dataset]['tasks'], device=DEVICE)
     
-    load_saved_model(model, tasks, args.net_basename, folder=configs["chexphoto"]["model_storage"], name=args.model_type)
+    load_saved_model(model, tasks, args.net_basename, folder=configs["utils"]["model_storage"], name=args.model_type)
 
     test_loader = datasets.get_dataset(args.dataset, args.batch_size, configs,
                                        generator=g, worker_init_fn=seed_worker, train=False,
-                                       partial_dataset=args.partial_dataset, chexphoto_labels=nih_labels,
+                                       partial_dataset=args.partial_dataset, nih_labels=nih_labels,
                                        whatsapp_data = True, image_name = True,
-                                       covid_img_only = True)       
+                                       covid_img_only = True)        
 
     
     foldername = args.net_basename
@@ -349,8 +349,8 @@ def generate_heatmap(args, random_seed):
         if test_labels[0][-1] == 1:
             t = '14'
             if args.method == 'grad-cam':
-                create_heatmap(model, val_rep, t, image_name[0], heatmap_orig_folder,False)
-                create_heatmap(model, val_rep_corrupt, t, image_name[0], heatmap_whatsapp_folder,False)
+                create_heatmap(model, val_rep, t, image_name[0], heatmap_orig_folder)
+                create_heatmap(model, val_rep_corrupt, t, image_name[0], heatmap_whatsapp_folder)
             elif args.method == 'smooth-grad':
                 create_smoothgrad_heatmap(model, val_rep, t, image_name[0], heatmap_orig_folder, num_samples=50, noise_level=0.1)
                 create_smoothgrad_heatmap(model, val_rep_corrupt, t, image_name[0], heatmap_whatsapp_folder, num_samples=50, noise_level=0.1)
@@ -368,9 +368,10 @@ def generate_heatmap(args, random_seed):
 
 
 def main():
+    #print("In main")
     parser = argparse.ArgumentParser()
     parser.add_argument('--net_basename', type=str, default='', help='basename of network (excludes _x_model.pkl)')
-    parser.add_argument('--dataset', type=str, default='chexphoto', help='which dataset to use', choices=['celeba', 'mnist'])
+    parser.add_argument('--dataset', type=str, default='cov_nih', help='which dataset to use', choices=['celeba', 'mnist'])
     parser.add_argument('--model_type', type=str, default='last', help='best or last model', choices=['best', 'last'])
     parser.add_argument('--random_seed', type=int, default=1, help='Start random seed to employ for the run.')
     parser.add_argument('--config_file', type=str, default="supervised_experiments/configs.json")
@@ -380,11 +381,13 @@ def main():
     parser.add_argument('--severity', type=str, default=None, help='severity')
     parser.add_argument('--multi_label', type=bool, default=True, help='multi_label_flag')
     parser.add_argument('--nih_labels', type=str, default=True, help='NIH labels to be used')
-    parser.add_argument('--partial_dataset', type=bool, default=True, help='Use only part of NIH dataset')
-    parser.add_argument('--heatmap_dir', type=str, default="/data6/anushkapa_scratch/unitary-scalarization-dmtl/heatmaps", help='Heatmap directory')
+    parser.add_argument('--partial_dataset', type=bool, default=False, help='Use only part of NIH dataset')
+    parser.add_argument('--heatmap_dir', type=str, default="/data6/anushkapa_scratch/unitary-scalarization-dmtl/heatmaps/temp", help='Heatmap directory')
     parser.add_argument('--method',type=str, default='grad-cam', help='Method to generate heatmap',choices=['grad-cam','smooth-grad','grad-cam-plus','grad-norm','grad-norm-sq'])
     args = parser.parse_args()
+    #print(args)
     generate_heatmap(args, args.random_seed)
     return
-#python3 supervised_experiments/heatmap.py --net_basename Ate_Pne_Nor_Cov_baseline-lr:0.001-wd:0.0_apricot-fire-8 --model_type best --heatmap_dir /data6/anushkapa_scratch/unitary-scalarization-dmtl/heatmaps/apricot_fire_8_norm_sq --nih_labels Ate_Pne_Nor_Cov --method grad-norm-sq
-main()    
+
+main()
+#python3 supervised_experiments/heatmap.py --net_basename Pne_Nor_Cov_baseline-lr:0.001-wd:0.0_balmy-wildflower-378 --model_type last --method grad-cam --nih_labels Pne_Nor_Cov

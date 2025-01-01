@@ -27,11 +27,12 @@
     },
 
     "cov_nih": {
-        "path": "/data6/rajivporana_scratch/datasets/nih_data/",
+        "path": "/data6/rajivporana_scratch/nih_data/",
         "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
         "img_rows": 512,
         "img_cols": 512,
-        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/"
+        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/",
+        "nih_lung_seg_path": "/data6/rajivporana_scratch/datasets/nih_lung_segment/"
     },
     "chexphoto": {
         "path": "/data6/rajivporana_scratch/datasets/chexphoto_data/",
