@@ -46,17 +46,17 @@
         "lung_segment_path": "/data6/rajivporana_scratch/datasets/covidx3_upsampled_lung_segment/test",
         "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/chexphoto/test_results/"
     },
-    "vindr":{
-        "path": "/data6/rajivporana_scratch/datasets/vindr_data/wh_proper_train/",
+    "vindr": {
+        "path": "/data6/rajivporana_scratch/datasets/vindr_data/",
         "train_filelist": "/data6/rajivporana_scratch/datasets/vindr_data/vindr_train.csv",
-        "val_filelist": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr_val.csv",
-        "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"],
+        "val_filelist": "/data6/rajivporana_scratch/datasets/vindr_data/vindr_val.csv",
+        "tasks": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"],
         "img_rows": 512,
         "img_cols": 512,
-        "model_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/saved_models/saved_models/",
-        "results_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/saved_results/",
+        "model_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/saved_models/",
+        "results_storage": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/results/",
         "lung_segment_path": "/data6/rajivporana_scratch/datasets/covidx3_upsampled_lung_segment/test",
-        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/results_folder/"
+        "test_results": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/vindr/test_results/"
     },
     "utils": {
         "model_storage_old": "/data6/anushkapa_scratch/unitary-scalarization-dmtl/saved_models/",

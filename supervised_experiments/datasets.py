@@ -10,6 +10,7 @@ from supervised_experiments.loaders.multi_mnist_loader import MNIST
 from supervised_experiments.loaders.nih_partial_loader import NIHDatasetPartial
 from supervised_experiments.loaders.covid_nih_partial_loader import CovidNIHDatasetPartial
 from supervised_experiments.loaders.covid_chexphoto_loader import CovidChexphotoDatasetGenerator
+from supervised_experiments.loaders.vindr_loader import BBoxDataset
 import os
 
 def global_transformer():
@@ -195,4 +196,30 @@ def get_dataset(dataset, batch_size, configs, generator=None, worker_init_fn=Non
                                                       generator=generator, worker_init_fn=worker_init_fn)
             return test_loader  
 
+    if "vindr" in dataset:
+        if train:
+            # Return training + validation split for training loop.
+            train_dst = BBoxDataset(csv_file=os.path.join(configs['vindr']['path'], 'train.csv'),
+                                    root_dir=os.path.join(configs['vindr']['path'], 'train_images'),
+                                    transform=global_transformer(),
+                                    img_size=(configs['vindr']['img_rows'], configs['vindr']['img_cols']))
+            val_dst = BBoxDataset(csv_file=os.path.join(configs['vindr']['path'], 'val.csv'),
+                                  root_dir=os.path.join(configs['vindr']['path'], 'val_images'),
+                                  transform=global_transformer(),
+                                  img_size=(configs['vindr']['img_rows'], configs['vindr']['img_cols']))
+
+            train_loader = torch.utils.data.DataLoader(train_dst, batch_size=batch_size, shuffle=True, num_workers=4,
+                                                       generator=generator, worker_init_fn=worker_init_fn)
+            val_loader = torch.utils.data.DataLoader(val_dst, batch_size=batch_size, num_workers=4,
+                                                     generator=generator, worker_init_fn=worker_init_fn)
+            return train_loader, val_loader
+        else:
+            # Return test split only for evaluation of a stored model.
+            test_dst = BBoxDataset(csv_file=os.path.join(configs['vindr']['path'], 'test.csv'),
+                                   root_dir=os.path.join(configs['vindr']['path'], 'test_images'),
+                                   transform=global_transformer(),
+                                   img_size=(configs['vindr']['img_rows'], configs['vindr']['img_cols']))
+            test_loader = torch.utils.data.DataLoader(test_dst, batch_size=batch_size, num_workers=4,
+                                                      generator=generator, worker_init_fn=worker_init_fn)
+            return test_loader
    

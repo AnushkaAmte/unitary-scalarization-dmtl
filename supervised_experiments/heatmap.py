@@ -236,7 +236,9 @@ def create_gradnormsq_heatmap(model, val_rep, t, image_name_path, heatmap_folder
     
     #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
     image_name_pt = image_name_pt.replace("/","_")
-    torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
+    #torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
+    torch.save(activations, os.path.join(heatmap_folder, f"activations_{t}_{image_name_pt}"))
+    torch.save(gradients, os.path.join(heatmap_folder, f"gradients{t}_{image_name_pt}")) 
     return
 
 
@@ -249,16 +251,16 @@ def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder):
     else:
         out_t[0][0].backward(retain_graph=True)
     gradients = model[t].get_activations_gradient()
-    activations = model[t].get_activations(val_rep).detach()
+    activations = model[t].get_activations(val_rep)
     #print("2")
     # weight the channels by corresponding gradients
     pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
     #print(f"alpha_{t} : {pooled_gradients}")
 
-    for i in range(activations.shape[1]):
+    for i in range(activations.detach().shape[1]):
         activations[:, i, :, :] *= pooled_gradients[i]
 
-    heatmap = torch.mean(activations, dim=1).squeeze()
+    heatmap = torch.mean(activations.detach(), dim=1).squeeze()
     # relu on top of the heatmap
     # expression (2) in https://arxiv.org/pdf/1610.02391.pdf
     # heatmap = np.maximum(heatmap, 0)
@@ -280,8 +282,9 @@ def create_heatmap(model, val_rep, t, image_name_path, heatmap_folder):
     image_name_pt = image_name_pt.replace("/","_")
     #torch.save(heatmap, os.path.join(heatmap_folder, ))   
     #torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
-    torch.save(activations, os.path.join(heatmap_folder, f"{image_name_pt}_activations_{t}.pt"))
-    torch.save(gradients, os.path.join(heatmap_folder, f"{image_name_pt}_heatmap_{t}.pt")) 
+    #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/","_"))) 
+    torch.save(activations, os.path.join(heatmap_folder, f"activations_{t}_{image_name_pt}"))
+    torch.save(gradients, os.path.join(heatmap_folder, f"gradients{t}_{image_name_pt}")) 
     return 
 
 
@@ -382,7 +385,7 @@ def main():
     parser.add_argument('--multi_label', type=bool, default=True, help='multi_label_flag')
     parser.add_argument('--nih_labels', type=str, default=True, help='NIH labels to be used')
     parser.add_argument('--partial_dataset', type=bool, default=False, help='Use only part of NIH dataset')
-    parser.add_argument('--heatmap_dir', type=str, default="/data6/anushkapa_scratch/unitary-scalarization-dmtl/heatmaps/temp", help='Heatmap directory')
+    parser.add_argument('--heatmap_dir', type=str, default="/data8/anushkapa/heatmaps/norm", help='Heatmap directory')
     parser.add_argument('--method',type=str, default='grad-cam', help='Method to generate heatmap',choices=['grad-cam','smooth-grad','grad-cam-plus','grad-norm','grad-norm-sq'])
     args = parser.parse_args()
     #print(args)

@@ -142,5 +142,6 @@ class FaceAttributeDecoder(nn.Module):
     def get_activations(self, x):
         x = self.transition_layer(x)
         x = self.relu(x)
-        return x
+        self.activations = x
+        return self.activations
             
