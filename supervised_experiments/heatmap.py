@@ -208,7 +208,7 @@ def create_gradnormsq_heatmap(model, val_rep, t, image_name_path, heatmap_folder
     mu_within_maps = torch.mean(norm_across_maps, dim=[0, 2, 3], keepdim=True)  # [1, 512, 1, 1]
     std_within_maps = torch.std(norm_across_maps, dim=[0, 2, 3], keepdim=True)  # [1, 512, 1, 1]
     
-    norm_gradients = (gradients - mu_within_maps) / (std_within_maps + 1e-5)
+    norm_gradients = (norm_across_maps - mu_within_maps) / (std_within_maps + 1e-5)
 
     # Pool gradients across spatial dimensions (H, W) for each feature map
     pooled_gradients = torch.mean(norm_gradients, dim=[0, 2, 3])  # Shape [512]
@@ -234,11 +234,11 @@ def create_gradnormsq_heatmap(model, val_rep, t, image_name_path, heatmap_folder
     elif ".JPG" in image_name:
         image_name_pt = image_name.replace(".JPG", ".pt")
     
-    #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
-    image_name_pt = image_name_pt.replace("/","_")
+    torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
+    #image_name_pt = image_name_pt.replace("/","_")
     #torch.save(pooled_gradients, os.path.join(heatmap_folder, f"{image_name_pt}_alpha_{t}.pt"))
-    torch.save(activations, os.path.join(heatmap_folder, f"activations_{t}_{image_name_pt}"))
-    torch.save(gradients, os.path.join(heatmap_folder, f"gradients{t}_{image_name_pt}")) 
+   # torch.save(activations, os.path.join(heatmap_folder, f"activations_{t}_{image_name_pt}"))
+   # torch.save(gradients, os.path.join(heatmap_folder, f"gradients{t}_{image_name_pt}")) 
     return
 
 
@@ -385,7 +385,7 @@ def main():
     parser.add_argument('--multi_label', type=bool, default=True, help='multi_label_flag')
     parser.add_argument('--nih_labels', type=str, default=True, help='NIH labels to be used')
     parser.add_argument('--partial_dataset', type=bool, default=False, help='Use only part of NIH dataset')
-    parser.add_argument('--heatmap_dir', type=str, default="/data8/anushkapa/heatmaps/norm", help='Heatmap directory')
+    parser.add_argument('--heatmap_dir', type=str, default="/data8/anushkapa/heatmaps/", help='Heatmap directory')
     parser.add_argument('--method',type=str, default='grad-cam', help='Method to generate heatmap',choices=['grad-cam','smooth-grad','grad-cam-plus','grad-norm','grad-norm-sq'])
     args = parser.parse_args()
     #print(args)
