@@ -34,6 +34,7 @@ def seed_worker(worker_id):
 def get_gradient(model, val_rep, task, input_img):
     out_t_val, _, pre_softmax = model[task](val_rep, None)
     gradient = torch.autograd.grad(torch.max(pre_softmax), input_img, retain_graph=True)
+    #print(out_t_val)
     return gradient[0], out_t_val
 
 
@@ -52,29 +53,64 @@ def evaluate_correaltion(main_tasks, sec_tasks, model, val_rep,test_images, val_
     
     for idt, t in enumerate(main_tasks):
         gradient_t_orig, out_t_val = get_gradient(model, val_rep, t, test_images)
-            
+        #print(f"Gradient_t_orig : {gradient_t_orig}")
         gradient_t_corr, out_t_val_corrupt = get_gradient(model, val_rep_corrupt, t, corrupt_imgs)
 
         u_t = (gradient_t_orig - gradient_t_corr)
             # print("t={}, size={}, norm={}".format(t, u_t.size(), LA.vector_norm(torch.flatten(u_t)) ))
         u_t = torch.mean(u_t, [0,1])
             # print("t={}, size={}, norm={}".format(t, u_t.size(), LA.vector_norm(torch.flatten(u_t)) ))
-
+        #print(f"u_t : {u_t}")
         for ids, s in enumerate(sec_tasks):
             gradient_s_orig, out_s_val = get_gradient(model, val_rep, s, test_images)
             gradient_s_corr, out_s_val_corrupt = get_gradient(model, val_rep_corrupt, s, corrupt_imgs)
+            #print(f"Gradient_s_orig : {gradient_s_orig}")
             u_s = gradient_s_orig - gradient_s_corr
                 # print("s={}, size={}, norm={}".format(s, u_s.size(), LA.vector_norm(torch.flatten(u_s)) ))
             u_s = torch.mean(u_s, [0,1])
                 # print("s={}, size={}, norm={}".format(s, u_s.size(), LA.vector_norm(torch.flatten(u_s)) ))
+            #print(f"u_s : {u_s}")
+            #diff_pdt = torch.dot(torch.flatten(u_t), torch.flatten(u_s))/(LA.vector_norm(torch.flatten(u_t)) * LA.vector_norm(torch.flatten(u_s)))    
+            u_t_flat = torch.flatten(u_t)
+            u_s_flat = torch.flatten(u_s)
 
-            diff_pdt = torch.dot(torch.flatten(u_t), torch.flatten(u_s))/(LA.vector_norm(torch.flatten(u_t)) * LA.vector_norm(torch.flatten(u_s)))    
+            # Compute the dot product
+            dot_product = torch.dot(u_t_flat, u_s_flat)
+
+            # Compute the norms
+            norm_u_t = torch.norm(u_t_flat)
+            norm_u_s = torch.norm(u_s_flat)
+            print(f"norm_u_t: {norm_u_t}")
+            print(f"norm_u_s: {norm_u_s}")
+            # Check for NaN or zero values in the norms
+            if torch.isnan(dot_product) or torch.isnan(norm_u_t) or torch.isnan(norm_u_s) or norm_u_t == 0 or norm_u_s == 0:
+                diff_pdt = torch.tensor(float('nan'))
+            else:
+                diff_pdt = dot_product / (norm_u_t * norm_u_s)
+
+            print(f"diff_pdt: {diff_pdt}")
+            
+            
             diff_pdt = diff_pdt.cpu().detach().numpy()
             #rho_dict["rho_"+t+"_"+s] = diff_pdt
             col_name = f"rho_{t}_{s}"
+            print(f"difference product for {t} and {s} : {diff_pdt}")
             rho_dict["rho_"+t+"_"+s] = diff_pdt
     return rho_dict, gradient_t_orig, gradient_t_corr
 
+
+def vulnerability_score(model, t,val_rep,test_images, val_rep_corrupt, corrupt_imgs):
+    #main_task = ['15']
+    gradient_t_orig, out_t_val = get_gradient(model, val_rep, t, test_images)
+    gradient_t_corr, out_t_val_corrupt = get_gradient(model, val_rep_corrupt, t, corrupt_imgs)
+
+    n_t = torch.norm(gradient_t_orig - gradient_t_corr)
+    d_t = torch.norm(gradient_t_orig) + 1e-5
+
+    n_t_1 = torch.norm(gradient_t_orig - gradient_t_corr,1)
+    d_t_1 = torch.norm(gradient_t_orig,1) + 1e-5
+    return n_t/d_t, n_t_1/d_t_1
+    # print("t={}, size={}, norm={}".format(t, u_t.size(), LA.vector_norm(torch.flatten(u_t)) ))
 
 def create_heatmap(model, val_rep, t, image_name_path):
     out_t, _, _ = model[t](val_rep, None)
@@ -102,17 +138,140 @@ def create_heatmap(model, val_rep, t, image_name_path):
     return gradients, heatmap
 
 
+def create_smoothgrad_heatmap(model, val_rep, t, image_name_path, num_samples=50, noise_level=0.1):
+   
+    # Initialize the smooth gradient
+    smooth_grad = torch.zeros_like(val_rep)
+    
+    for _ in range(num_samples):
+        # Add Gaussian noise to the input
+        noisy_input = val_rep + noise_level * torch.randn_like(val_rep)
+        
+        # Forward pass
+        out_t, _, _ = model[t](noisy_input, None)
+        
+        # Backward pass
+        if out_t[0][1] > out_t[0][0]:
+            out_t[0][1].backward(retain_graph=True)
+        else:
+            out_t[0][0].backward(retain_graph=True)
+        
+        # Get the gradients
+        gradients = model[t].get_activations_gradient()
+        
+        # Accumulate the gradients
+        smooth_grad += gradients
+    
+    # Average the gradients
+    smooth_grad /= num_samples
+    
+    # Generate the heatmap
+    activations = model[t].get_activations(val_rep).detach()
+    pooled_gradients = torch.mean(smooth_grad, dim=[0, 2, 3])
+    for i in range(activations.shape[1]):
+        activations[:, i, :, :] *= pooled_gradients[i]
+    
+    heatmap = torch.mean(activations, dim=1).squeeze()
+    heatmap = torch.nn.functional.relu(heatmap)
+    heatmap /= torch.max(heatmap)
+    
+    # Save the heatmap
+    #print(heatmap)
+    image_name_list = image_name_path.split('/')
+    image_name = image_name_list[1]
+    if ".png" in image_name:
+        image_name_pt = image_name.replace(".png", ".pt")
+    elif ".jpg" in image_name:
+        image_name_pt = image_name.replace(".jpg", ".pt")
+    elif ".jpeg" in image_name:
+        image_name_pt = image_name.replace(".jpeg", ".pt")
+    elif ".JPG" in image_name:
+        image_name_pt = image_name.replace(".JPG", ".pt")
+    
+    #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
+    return gradients, heatmap
+
+def create_gradnormsq_heatmap(model, val_rep, t, image_name_path):
+    
+    # Forward pass
+    out_t, _, _ = model[t](val_rep, None)
+    
+    # Backward pass
+    if out_t[0][1] > out_t[0][0]:
+        out_t[0][1].backward(retain_graph=True)
+    else:
+        out_t[0][0].backward(retain_graph=True)
+    
+    # Get the gradients
+    gradients = model[t].get_activations_gradient()
+    activations = model[t].get_activations(val_rep).detach()
+    
+    mu_across_maps = torch.mean(gradients, dim=1, keepdim=True)  
+    std_across_maps = torch.std(gradients, dim=1, keepdim=True)  
+    
+    norm_across_maps = (gradients - mu_across_maps) / (std_across_maps + 1e-5)
+
+    # Step 2: Normalize each feature map individually (within-map normalization)
+    mu_within_maps = torch.mean(norm_across_maps, dim=[0, 2, 3], keepdim=True)  # [1, 512, 1, 1]
+    std_within_maps = torch.std(norm_across_maps, dim=[0, 2, 3], keepdim=True)  # [1, 512, 1, 1]
+    
+    norm_gradients = (norm_across_maps - mu_within_maps) / (std_within_maps + 1e-5)
+
+    # Pool gradients across spatial dimensions (H, W) for each feature map
+    pooled_gradients = torch.mean(norm_gradients, dim=[0, 2, 3])  # Shape [512]
+    #pooled gradients is \alpha_c^k
+    # Weight the channels by corresponding gradients
+    for i in range(activations.shape[1]):
+        activations[:, i, :, :] *= pooled_gradients[i]
+    
+    # Generate the heatmap
+    heatmap = torch.sum(activations, dim=1).squeeze()
+    heatmap = torch.nn.functional.relu(heatmap)
+    heatmap /= torch.max(heatmap)
+    
+    # Save the heatmap
+    image_name_list = image_name_path.split('/')
+    image_name = image_name_list[1]
+    if ".png" in image_name:
+        image_name_pt = image_name.replace(".png", ".pt")
+    elif ".jpg" in image_name:
+        image_name_pt = image_name.replace(".jpg", ".pt")
+    elif ".jpeg" in image_name:
+        image_name_pt = image_name.replace(".jpeg", ".pt")
+    elif ".JPG" in image_name:
+        image_name_pt = image_name.replace(".JPG", ".pt")
+    
+    #torch.save(heatmap, os.path.join(heatmap_folder, image_name_pt.replace("/", "_")))
+    return gradients, heatmap
+
+
+
+
+
 def ols_score(fname, image_size, lung_segment_path, heatmap_hr,heatmap_lr, row, grad_type):
     lung_region = np.load(os.path.join(lung_segment_path,fname))
     lung_region = resize(lung_region, (image_size, image_size))
         
     heatmap_hr = heatmap_hr.cpu().detach().numpy()
-    heatmap_lr = heatmap_lr.cpu().detach().numpy()        
+    heatmap_lr = heatmap_lr.cpu().detach().numpy()  
+    #heatmap_hr = resize(heatmap_hr, (image_size, image_size))
+    #heatmap_lr = resize(heatmap_lr, (image_size, image_size))
+    #print(heatmap_hr.shape, lung_region.shape)      
+    heatmap_hr = resize(heatmap_hr, lung_region.shape)
+    heatmap_lr = resize(heatmap_lr, lung_region.shape)
+    if np.isnan(heatmap_hr).any() or np.isnan(heatmap_lr).any() or np.isnan(lung_region).any():
+        #print("Warning: NaN values encountered in heatmaps or lung region.")
+        # Handle NaN values, e.g., by replacing them with zeros
+        heatmap_hr = np.nan_to_num(heatmap_hr)
+        heatmap_lr = np.nan_to_num(heatmap_lr)
+        lung_region = np.nan_to_num(lung_region)
+    
     if np.sum(lung_region) > 0:
         image_name = fname
         for threshold in [0.4, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75]:
             # print("Numerator :", np.sum((heatmap_hr>threshold)), np.sum((lung_region>0)) , np.sum((heatmap_hr>threshold)*(lung_region>0)))
             # print("Denominator :", np.sum(heatmap_hr>threshold)+0.00000001)
+            #lung_region = lung_region.resize(heatmap_hr.shape)
             dice_hr = (np.sum((heatmap_hr>threshold)*(lung_region>0))/(np.sum(heatmap_hr>threshold)+0.00000001))
             dice_lr = (np.sum((heatmap_lr>threshold)*(lung_region>0))/(np.sum(heatmap_lr>threshold)+0.00000001))
             row[grad_type+'HR_Score_' + str(threshold)] = dice_hr
@@ -187,14 +346,9 @@ def test_multi_task(args, random_seed):
     losses_corr = {t: 0.0 for t in tasks}
     num_test_batches = 0
     cos = torch.nn.CosineSimilarity(dim=0)
-    columns=['start','rho_15_6', 'rho_15_14', 'rho_15_15', 'image_name', 'cosine_sim',
-       'sal_diff_norm', 'SmoothHR_Score_0.4', 'SmoothLR_Score_0.4',
-       'SmoothHR_Score_0.5', 'SmoothLR_Score_0.5', 'SmoothHR_Score_0.55',
-       'SmoothLR_Score_0.55', 'SmoothHR_Score_0.6', 'SmoothLR_Score_0.6',
-       'SmoothHR_Score_0.65', 'SmoothLR_Score_0.65', 'SmoothHR_Score_0.7',
-       'SmoothLR_Score_0.7', 'SmoothHR_Score_0.75', 'SmoothLR_Score_0.75']
+ 
     df = pd.DataFrame()
-    filename = args.dataset + args.net_basename + ".csv" 
+    filename = "all" + args.dataset + args.net_basename + ".csv" 
     file_path = os.path.join(configs[args.dataset]['test_results'], filename)           
     
     count =0
@@ -205,7 +359,7 @@ def test_multi_task(args, random_seed):
         corrupt_imgs = batch_val[2].to(DEVICE)
         corrupt_imgs = corrupt_imgs.requires_grad_(True)    
         test_labels = batch_val[3].to(torch.long).to(DEVICE)
-
+        #print(test_images)
         val_rep, _ = model['rep'](test_images, None)
         val_rep_corrupt, _ = model['rep'](corrupt_imgs, None)
         
@@ -218,6 +372,7 @@ def test_multi_task(args, random_seed):
                     val_rep, test_images, val_rep_corrupt, corrupt_imgs)
             rho_dict['image_name'] = image_name[0].split("/")[-1]        
             
+            #print(rho_dict)
             cosine_dist = cos(torch.flatten(gradient_t_orig), torch.flatten(gradient_t_corr))
             rho_dict['cosine_sim'] = cosine_dist.cpu().detach().numpy()
 
@@ -231,18 +386,36 @@ def test_multi_task(args, random_seed):
             gradient_t_corr = normalize_gradient(gradient_t_corr)
             rho_dict = ols_score(replace_extension(image_name[0]), gradient_t_orig.shape[0], \
                     args.lung_segment_path, gradient_t_orig, gradient_t_corr, rho_dict, \
-                    "Smooth")
+                    "Gradients")
+            vul2, vul1 = vulnerability_score(model, '15', val_rep, test_images, val_rep_corrupt, corrupt_imgs)
+            rho_dict['Vul2'] = vul2.cpu().detach().numpy()
+            rho_dict['Vul1'] = vul1.cpu().detach().numpy()
 
-            gradient_t_orig_sq = normalize_gradient(gradient_t_orig_sq)
-            gradient_t_corr_sq = normalize_gradient(gradient_t_corr_sq)   
+
+            gradients_orig, heatmap_orig_s = create_smoothgrad_heatmap(model, val_rep, '15', image_name[0])
+            gradients_corr, heatmap_corr_s = create_smoothgrad_heatmap(model, val_rep_corrupt, '15', image_name[0])
+            #print(heatmap_orig_s.shape, heatmap_corr_s.shape)
             rho_dict = ols_score(replace_extension(image_name[0]), gradient_t_orig.shape[0], \
-                    args.lung_segment_path, gradient_t_orig_sq, gradient_t_corr_sq, rho_dict, \
-                    "SmoothSq") 
+                    args.lung_segment_path, heatmap_orig_s, heatmap_corr_s, rho_dict, \
+                    "SmoothCAM")
+            
+            gradients_orig, heatmap_orig_n = create_gradnormsq_heatmap(model, val_rep, '15', image_name[0])
+            gradients_corr, heatmap_corr_n = create_gradnormsq_heatmap(model, val_rep_corrupt, '15', image_name[0])
+            #print(heatmap_orig_n.shape, heatmap_corr_n.shape)
+            rho_dict = ols_score(replace_extension(image_name[0]), gradient_t_orig.shape[0], \
+                    args.lung_segment_path, heatmap_orig_n, heatmap_corr_n, rho_dict, \
+                    "Stable")
+            gradient_orig, heatmap_orig_g = create_heatmap(model, val_rep, '15', image_name[0])
+            gradient_corr, heatmap_corr_g = create_heatmap(model, val_rep_corrupt, '15', image_name[0])
+            #print(heatmap_orig_g.shape, heatmap_corr_g.shape)
+            rho_dict = ols_score(replace_extension(image_name[0]), gradient_t_orig.shape[0], \
+                    args.lung_segment_path, heatmap_orig_g, heatmap_corr_g, rho_dict, \
+                    "GradCAM")
             count+=1
             
-            # print(rho_dict)  
+            #print(rho_dict)  
             df = pd.concat([df, pd.DataFrame([rho_dict])], ignore_index=True)
-            if count == 4812:
+            if count == 10:
                 break
     df.to_csv(file_path, index=False)
     
@@ -266,7 +439,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_labels', type=str, default=True, help='Dataset labels labels to be used')
     parser.add_argument('--partial_dataset', type=bool, default=True, help='Use only part of NIH dataset')
     parser.add_argument('--lung_segment_path', type=str,
-            default='/data6/rajivporana_scratch/datasets/covidx3_upsampled_lung_segment/test/',
+            default='/data8/rajiv_porana/covid_dataset/covidx3_upsampled_lung_segment/test/',
             help='Lung segmented image path')
             
     args = parser.parse_args()
@@ -274,4 +447,4 @@ if __name__ == '__main__':
     test_multi_task(args, args.random_seed)
 
 
-    #python3 supervised_experiments/test_cov_nih_all.py --net_basename Pne_Nor_Cov_baseline-lr:0.001-wd:0.0_good-wind-7 --model_type best --task_labels Pne_Nor_Cov --data_labels Pne_Nor_Cov 
+    #python3 supervised_experiments/test_cov_nih_all.py --net_basename Pne_Nor_Cov_baseline-lr:0.001-wd:0.0_balmy-wildflower-378 --model_type last --task_labels Pne_Nor_Cov --data_labels Pne_Nor_Cov 
